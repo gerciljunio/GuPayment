@@ -116,6 +116,8 @@ class SubscriptionBuilder
 
         $subscriptionIugu = $this->user->createIuguSubscription($this->buildPayload($customer->id));
 
+        \Log::info($subscriptionIugu->errors);
+
         if (isset($subscriptionIugu->errors)) {
             return false;
         }
