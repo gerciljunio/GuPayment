@@ -19,6 +19,12 @@ class GuPaymentTest extends TestCase
 {
     use WithFaker;
 
+    protected $iuguUserModelColumn;
+
+    protected $iuguSubscriptionModelIdColumn;
+    
+    protected $iuguSubscriptionModelPlanColumn;
+
     public static function setUpBeforeClass()
     {
         if (file_exists(__DIR__.'/../.env')) {
@@ -41,22 +47,31 @@ class GuPaymentTest extends TestCase
         $db->bootEloquent();
         $db->setAsGlobal();
 
-        $this->schema()->create('users', function ($table) {
+        $iuguUserModelColumn = getenv('IUGU_USER_MODEL_COLUMN') ?: 'iugu_id';
+        $this->iuguUserModelColumn = $iuguUserModelColumn;
+
+        $this->schema()->create('users', function ($table) use ($iuguUserModelColumn) {
             $table->increments('id');
             $table->string('email');
             $table->string('name');
-            $table->string('iugu_id')->nullable();
+            $table->string($iuguUserModelColumn)->nullable();
             $table->string('card_brand')->nullable();
             $table->string('card_last_four')->nullable();
             $table->timestamps();
         });
 
-        $this->schema()->create('subscriptions', function ($table) {
+        $iuguSubscriptionModelIdColumn = getenv('IUGU_SUBSCRIPTION_MODEL_ID_COLUMN') ?: 'iugu_id';
+        $this->iuguSubscriptionModelIdColumn = $iuguSubscriptionModelIdColumn;
+
+        $iuguSubscriptionModelPlanColumn = getenv('IUGU_SUBSCRIPTION_MODEL_PLAN_COLUMN') ?: 'iugu_plan';
+        $this->iuguSubscriptionModelPlanColumn = $iuguSubscriptionModelPlanColumn;
+
+        $this->schema()->create('subscriptions', function ($table) use ($iuguSubscriptionModelIdColumn, $iuguSubscriptionModelPlanColumn) {
             $table->increments('id');
             $table->integer('user_id');
             $table->string('name');
-            $table->string('iugu_id');
-            $table->string('iugu_plan');
+            $table->string($iuguSubscriptionModelIdColumn);
+            $table->string($iuguSubscriptionModelPlanColumn);
             $table->timestamp('trial_ends_at')->nullable();
             $table->timestamp('ends_at')->nullable();
             $table->timestamps();
@@ -82,7 +97,7 @@ class GuPaymentTest extends TestCase
         $user->newSubscription('main', 'gold')->create($this->getTestToken());
 
         $this->assertEquals(1, $user->subscriptions()->count());
-        $this->assertNotNull($user->subscription('main')->iugu_id);
+        $this->assertNotNull($user->subscription('main')->{$this->iuguSubscriptionModelIdColumn});
 
         $this->assertTrue($user->subscribed('main'));
         $this->assertTrue($user->onPlan('gold'));
@@ -121,7 +136,7 @@ class GuPaymentTest extends TestCase
         // Swap Plan
         $subscription->swap('silver');
 
-        $this->assertEquals('silver', $subscription->iugu_plan);
+        $this->assertEquals('silver', $subscription->{$this->iuguSubscriptionModelPlanColumn});
 
         // Invoice Tests
         $invoices = $user->invoices();
@@ -182,7 +197,7 @@ class GuPaymentTest extends TestCase
         $request = Request::create('/', 'POST', [
             'event' => 'subscription.expired',
             'data' => [
-                "id"  => $subscription->iugu_id,
+                "id"  => $subscription->{$this->iuguSubscriptionModelIdColumn},
                 "customer_name" => "Gabriel Peixoto",
                 "customer_email" => "gabriel@teste.com.br",
                 "expires_at" => Carbon::now()->format('Y-m-d')
@@ -361,7 +376,7 @@ class GuPaymentTest extends TestCase
             $card->asIuguCard()->id,
             $charge->customer_payment_method_id
         );
-        $this->assertEquals($user->iugu_id, $charge->customer_id);
+        $this->assertEquals($user->{$this->iuguUserModelColumn}, $charge->customer_id);
     }
 
     public function testCreatingOneSingleChargeWithBankSlipMethod()
